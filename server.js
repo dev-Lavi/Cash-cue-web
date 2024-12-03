@@ -3,7 +3,7 @@ require('dotenv').config();
 require('./config/passport');
 
 const express = require('express');
-const cors = require('cors'); // Import CORS
+
 const session = require('express-session');
 const passport = require('passport'); // Import Passport
 const ExpenseRouter = require('./api/expense');
@@ -13,8 +13,9 @@ require('./config/db');
 
 // Import necessary modules
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3002;
 
+const cors = require('cors'); // Import CORS
 app.use(cors({
     origin: 'http://localhost:5173',
     credentials: true,  
