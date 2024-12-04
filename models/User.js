@@ -5,9 +5,7 @@ const Schema = mongoose.Schema;
 const ExpenseSchema = new Schema({
     amount: { type: Number, required: true },
     description: { type: String, required: true },
-    category: { type: String, required: true }, // E.g., Food, Travel, etc.
     date: { type: Date, required: true },
-    attachment: { type: String }, // File URL or path
 }, { timestamps: true }); // Automatically adds createdAt and updatedAt fields
 
 const UserSchema = new Schema({

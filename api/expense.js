@@ -2,19 +2,30 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const authenticate = require('../middleware/authenticate');
-const upload = require('../config/multer');
-
 
 // Add an expense
-router.post('/add', authenticate, upload.single('attachment'), async (req, res) => {
-    const { amount, description, category, date } = req.body;
-    const attachment = req.file ? `/uploads/${req.file.filename}` : null;
+router.post('/add', authenticate, async (req, res) => {
+    const { amount, description, date } = req.body;
 
     // Validate input
-    if (!amount || !description || !category || !date) {
+    if (!amount || isNaN(amount) || Number(amount) <= 0) {
         return res.status(400).json({
             status: "FAILED",
-            message: "All fields (amount, description, category, date) are required.",
+            message: "Amount must be a positive number.",
+        });
+    }
+     
+    if (!description || !date) {
+        return res.status(400).json({
+            status: "FAILED",
+            message: "All fields (amount, description, date) are required.",
+        });
+    }
+    
+    if (isNaN(Date.parse(date))) {
+        return res.status(400).json({
+            status: "FAILED",
+            message: "Invalid date format.",
         });
     }
 
@@ -28,20 +39,19 @@ router.post('/add', authenticate, upload.single('attachment'), async (req, res) 
             });
         }
 
-        user.expenses.push({
+        const newExpense = {
             amount,
             description,
-            category,
             date: new Date(date),
-            attachment,
-        });
+        };
 
+        user.expenses.push(newExpense);
         await user.save();
 
-        res.status(201).json({
+       res.status(201).json({
             status: "SUCCESS",
             message: "Expense added successfully!",
-            expense: user.expenses[user.expenses.length - 1],
+            expense: newExpense,
         });
     } catch (error) {
         console.error(error);
@@ -77,9 +87,25 @@ router.get('/list', authenticate, async (req, res) => {
     }
 });
 
-// Delete an expense
-router.delete('/delete/:expenseId', authenticate, async (req, res) => {
+// Edit an expense
+router.put('/edit/:expenseId', authenticate, async (req, res) => {
     const { expenseId } = req.params;
+    const { amount, description, date } = req.body;
+
+    // Validate input
+    if (amount && (isNaN(amount) || Number(amount) <= 0)) {
+        return res.status(400).json({
+            status: "FAILED",
+            message: "Amount must be a positive number.",
+        });
+    }
+
+    if (date && isNaN(Date.parse(date))) {
+        return res.status(400).json({
+            status: "FAILED",
+            message: "Invalid date format.",
+        });
+    }
 
     try {
         const user = await User.findById(req.user.id);
@@ -91,10 +117,53 @@ router.delete('/delete/:expenseId', authenticate, async (req, res) => {
             });
         }
 
-        // Filter out the expense to delete
-        user.expenses = user.expenses.filter(expense => expense._id.toString() !== expenseId);
+        // Find the expense to edit
+        const expense = user.expenses.id(expenseId);
+        if (!expense) {
+            return res.status(404).json({
+                status: "FAILED",
+                message: "Expense not found.",
+            });
+        }
+
+        // Update fields if provided
+        if (amount) expense.amount = amount;
+        if (description) expense.description = description;
+        if (date) expense.date = new Date(date);
 
         await user.save();
+
+        res.json({
+            status: "SUCCESS",
+            message: "Expense updated successfully!",
+            expense,
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            status: "FAILED",
+            message: "An error occurred while editing the expense.",
+        });
+    }
+});
+
+// Delete an expense
+router.delete('/delete/:expenseId', authenticate, async (req, res) => {
+    const { expenseId } = req.params;
+
+    try {
+        const user = await User.findByIdAndUpdate(
+            req.user.id,
+            { $pull: { expenses: { _id: expenseId } } },
+            { new: true }
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                status: "FAILED",
+                message: "User not found.",
+            });
+        }
 
         res.json({
             status: "SUCCESS",
