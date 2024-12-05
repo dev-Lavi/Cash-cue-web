@@ -6,7 +6,7 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const JWT_SECRET = "your_jwt_secret"; // Replace with a strong secret key
-const JWT_EXPIRES_IN = "10h";
+const JWT_EXPIRES_IN = "15m";
 const User = require('./../models/User');
 
 // password handler
@@ -222,7 +222,7 @@ router.post('/signin', async (req, res) => {
          const token = jwt.sign(
             { id: user._id, email: user.email }, // Payload
             JWT_SECRET, // Secret key
-            { expiresIn: JWT_EXPIRES_IN } // Options
+            { expiresIn: "1y" } // Options
         );
 
         return res.json({

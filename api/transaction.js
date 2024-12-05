@@ -70,9 +70,10 @@ router.post('/add', authenticate, async (req, res) => {
     }
 });
 
-// Get all expenses for the authenticated user
+// Get all transactions for the authenticated user
 router.get('/list', authenticate, async (req, res) => {
     try {
+        // Find the authenticated user by their ID
         const user = await User.findById(req.user.id);
 
         if (!user) {
@@ -82,15 +83,16 @@ router.get('/list', authenticate, async (req, res) => {
             });
         }
 
+        // Respond with all transactions
         res.json({
             status: "SUCCESS",
-            expenses: user.expenses,
+            transactions: user.transactions,
         });
     } catch (error) {
         console.error(error);
         res.status(500).json({
             status: "FAILED",
-            message: "An error occurred while fetching expenses.",
+            message: "An error occurred while fetching transactions.",
         });
     }
 });
