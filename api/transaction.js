@@ -83,10 +83,25 @@ router.get('/list', authenticate, async (req, res) => {
             });
         }
 
-        // Respond with all transactions
+        // Format the date for each transaction
+        const transactions = user.transactions.map(transaction => {
+            const d = new Date(transaction.date);
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const hours = String(d.getHours()).padStart(2, '0');
+            const minutes = String(d.getMinutes()).padStart(2, '0');
+
+            return {
+                ...transaction.toObject(),
+                date: `${year}-${month}-${day} ${hours}:${minutes}`, // Formatted date
+            };
+        });
+
+        // Respond with formatted transactions
         res.json({
             status: "SUCCESS",
-            transactions: user.transactions,
+            transactions,
         });
     } catch (error) {
         console.error(error);
