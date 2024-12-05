@@ -3,26 +3,33 @@ const router = express.Router();
 const User = require('../models/User');
 const authenticate = require('../middleware/authenticate');
 
-// Add an expense
+// Add a transaction
 router.post('/add', authenticate, async (req, res) => {
-    const { amount, description, date } = req.body;
+    const { type, amount, description, date } = req.body;
 
     // Validate input
+    if (!type || (type !== "Expense" && type !== "Income")) {
+        return res.status(400).json({
+            status: "FAILED",
+            message: "Transaction type must be either 'Expense' or 'Income'.",
+        });
+    }
+
     if (!amount || isNaN(amount) || Number(amount) <= 0) {
         return res.status(400).json({
             status: "FAILED",
             message: "Amount must be a positive number.",
         });
     }
-     
-    if (!description || !date) {
+
+    if (!description || typeof description !== "string") {
         return res.status(400).json({
             status: "FAILED",
-            message: "All fields (amount, description, date) are required.",
+            message: "Description is required and must be a string.",
         });
     }
-    
-    if (isNaN(Date.parse(date))) {
+
+    if (!date || isNaN(Date.parse(date))) {
         return res.status(400).json({
             status: "FAILED",
             message: "Invalid date format.",
@@ -39,25 +46,26 @@ router.post('/add', authenticate, async (req, res) => {
             });
         }
 
-        const newExpense = {
+        const newTransaction = {
+            type,
             amount,
             description,
             date: new Date(date),
         };
 
-        user.expenses.push(newExpense);
+        user.transactions.push(newTransaction); // Store transactions in the `transactions` field
         await user.save();
 
-       res.status(201).json({
+        res.status(201).json({
             status: "SUCCESS",
-            message: "Expense added successfully!",
-            expense: newExpense,
+            message: "Transaction added successfully!",
+            transaction: newTransaction,
         });
     } catch (error) {
         console.error(error);
         res.status(500).json({
             status: "FAILED",
-            message: "An error occurred while adding the expense.",
+            message: "An error occurred while adding the transaction.",
         });
     }
 });
