@@ -6,7 +6,7 @@ const express = require('express');
 
 const session = require('express-session');
 const passport = require('passport'); // Import Passport
-const ExpenseRouter = require('./api/expense');
+const ExpenseRouter = require('./api/transaction');
 
 // Database connection
 require('./config/db'); 
@@ -46,7 +46,7 @@ app.use('/uploads', express.static('uploads'));
 
 // Set up routes
 app.use('/user', UserRouter);
-app.use('/expense', ExpenseRouter); // Expense routes
+app.use('/transaction', ExpenseRouter); // Expense routes
 
 // Default route for health check or debugging
 app.get('/', (req, res) => {
