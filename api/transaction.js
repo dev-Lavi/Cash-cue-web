@@ -340,5 +340,99 @@ router.get('/graph2', authenticate, async (req, res) => {
     }
 });
 
+// Last month transaction (in IST)
+router.get('/graph3', authenticate, async (req, res) => {
+    try {
+        console.log('Fetching user data...');
+
+        // Fetch the user's transactions from the database
+        const user = await User.findById(req.user.id);
+
+        if (!user) {
+            console.error('User not found.');
+            return res.status(404).json({
+                status: "FAILED",
+                message: "User not found.",
+            });
+        }
+
+        console.log('Processing transactions for the last 4 weeks (IST)...');
+
+        // Get current date in IST (UTC +5:30)
+        const now = new Date();
+        const istOffset = 5 * 60 + 30; // IST offset in minutes
+        const istNow = new Date(now.getTime() + istOffset * 60 * 1000);
+
+        // Get today's date in IST
+        const today = istNow;
+
+        const currentDayOfWeek = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
+        const startOfWeek = new Date(today.getTime() - currentDayOfWeek * 24 * 60 * 60 * 1000); // Start of the current week
+
+        // Define the start and end dates for the last 4 weeks in IST
+        const weeks = Array.from({ length: 4 }, (_, i) => {
+            const end = new Date(startOfWeek.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+            const start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
+            
+            // Format start and end dates as YYYY-MM-DD in IST
+            const formatDate = (date) => {
+                return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
+            };
+
+            return {
+                weekLabel: `Week ${4 - i}`,
+                start: formatDate(start),
+                end: formatDate(end),
+            };
+        });
+
+        // Initialize totals for each week
+        const weeklyTotals = weeks.map((week) => ({
+            weekLabel: week.weekLabel,
+            totalIncome: 0,
+            totalExpense: 0,
+        }));
+
+        // Process transactions and group by week
+        user.transactions.forEach((transaction) => {
+            const transactionDate = new Date(transaction.date);
+            const istTransactionDate = new Date(transactionDate.getTime() + istOffset * 60 * 1000); // Adjust to IST
+
+            // Check which week this transaction belongs to
+            for (let i = 0; i < weeks.length; i++) {
+                const week = weeks[i];
+                const startDate = new Date(week.start);
+                const endDate = new Date(week.end);
+
+                // Adjust start and end date to IST
+                if (istTransactionDate >= startDate && istTransactionDate <= endDate) {
+                    if (transaction.type === 'Income') {
+                        weeklyTotals[i].totalIncome += transaction.amount;
+                    } else if (transaction.type === 'Expense') {
+                        weeklyTotals[i].totalExpense += transaction.amount;
+                    }
+                    break;
+                }
+            }
+        });
+
+        console.log('Summary for the last 4 weeks (IST):', weeklyTotals);
+
+        // Respond with the calculated weekly totals
+        res.status(200).json({
+            status: "SUCCESS",
+            message: "Expense and income summary for the last 4 weeks fetched successfully!",
+            data: weeklyTotals,
+        });
+    } catch (error) {
+        console.error('Error fetching summary:', error.message);
+
+        // Handle errors gracefully
+        res.status(500).json({
+            status: "FAILED",
+            message: "An error occurred while fetching the summary.",
+        });
+    }
+});
 
 module.exports = router;
