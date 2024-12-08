@@ -83,18 +83,18 @@ router.get('/list', authenticate, async (req, res) => {
             });
         }
 
-        // Format the date for each transaction
-        const transactions = user.transactions.map(transaction => {
+         // Format the date for each transaction in UTC
+         const transactions = user.transactions.map(transaction => {
             const d = new Date(transaction.date);
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            const hours = String(d.getHours()).padStart(2, '0');
-            const minutes = String(d.getMinutes()).padStart(2, '0');
+            const year = d.getUTCFullYear(); // Use UTC methods
+            const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(d.getUTCDate()).padStart(2, '0');
+            const hours = String(d.getUTCHours()).padStart(2, '0');
+            const minutes = String(d.getUTCMinutes()).padStart(2, '0');
 
             return {
                 ...transaction.toObject(),
-                date: `${year}-${month}-${day} ${hours}:${minutes}`, // Formatted date
+                date: `${year}-${month}-${day} ${hours}:${minutes}`, // Formatted date in UTC
             };
         });
 
@@ -199,6 +199,59 @@ router.delete('/delete/:expenseId', authenticate, async (req, res) => {
         res.status(500).json({
             status: "FAILED",
             message: "An error occurred while deleting the expense.",
+        });
+    }
+});
+
+// Get all transactions of the current day for the authenticated user
+router.get('/graph1', authenticate, async (req, res) => {
+    try {
+        // Find the authenticated user by their ID
+        const user = await User.findById(req.user.id);
+
+        if (!user) {
+            return res.status(404).json({
+                status: "FAILED",
+                message: "User not found.",
+            });
+        }
+
+        // Get the current date in UTC
+        const today = new Date();
+        const utcToday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+        // Filter transactions for the current day in UTC and map the required fields
+        const transactions = user.transactions
+            .filter(transaction => {
+                const transactionDate = new Date(transaction.date);
+                return (
+                    transactionDate.getUTCDate() === utcToday.getUTCDate() &&
+                    transactionDate.getUTCMonth() === utcToday.getUTCMonth() &&
+                    transactionDate.getUTCFullYear() === utcToday.getUTCFullYear()
+                );
+            })
+            .map(transaction => {
+                const transactionDate = new Date(transaction.date);
+                const hours = String(transactionDate.getUTCHours()).padStart(2, '0');
+                const minutes = String(transactionDate.getUTCMinutes()).padStart(2, '0');
+
+                return {
+                    type: transaction.type, // Include only type (e.g., "Expense" or "Income")
+                    amount: transaction.amount, // Include the transaction amount
+                    time: `${hours}:${minutes}`, // Format time as HH:mm in UTC
+                };
+            });
+
+        // Respond with the filtered transactions
+        res.json({
+            status: "SUCCESS",
+            transactions,
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            status: "FAILED",
+            message: "An error occurred while fetching transactions.",
         });
     }
 });
