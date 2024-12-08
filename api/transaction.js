@@ -256,4 +256,79 @@ router.get('/graph1', authenticate, async (req, res) => {
     }
 });
 
+//get weekly data
+router.get('/graph2', authenticate, async (req, res) => {
+    try {
+        console.log('Fetching user data...');
+
+        // Fetch the user's transactions from the database
+        const user = await User.findById(req.user.id);
+
+        if (!user) {
+            console.error('User not found.');
+            return res.status(404).json({
+                status: "FAILED",
+                message: "User not found.",
+            });
+        }
+
+        console.log('Processing transactions for the last 7 days...');
+
+        // Get today's date and calculate the date 7 days ago
+        const today = new Date();
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(today.getDate() - 6); // Include today in the 7-day window
+
+        // Initialize data structure to hold totals for the last 7 days
+        const totals = {};
+
+        // Populate the totals object with default values for each day
+        for (let i = 0; i < 7; i++) {
+            const date = new Date();
+            date.setDate(sevenDaysAgo.getDate() + i);
+            const formattedDate = date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+            totals[formattedDate] = { totalIncome: 0, totalExpense: 0 };
+        }
+
+        // Process transactions to calculate totals
+        user.transactions.forEach((transaction) => {
+            const transactionDate = new Date(transaction.date).toISOString().split('T')[0]; // Format as YYYY-MM-DD
+
+            // Check if the transaction date is within the last 7 days
+            if (totals[transactionDate]) {
+                if (transaction.type === 'Income') {
+                    totals[transactionDate].totalIncome += transaction.amount;
+                } else if (transaction.type === 'Expense') {
+                    totals[transactionDate].totalExpense += transaction.amount;
+                }
+            }
+        });
+
+        // Prepare the result as an array for easier graph plotting
+        const result = Object.keys(totals).map((date) => ({
+            date,
+            totalIncome: totals[date].totalIncome,
+            totalExpense: totals[date].totalExpense,
+        }));
+
+        console.log('Summary for the last 7 days:', result);
+
+        // Respond with the calculated totals
+        res.status(200).json({
+            status: "SUCCESS",
+            message: "Expense and income summary fetched successfully!",
+            data: result,
+        });
+    } catch (error) {
+        console.error('Error fetching summary:', error.message);
+
+        // Handle errors gracefully
+        res.status(500).json({
+            status: "FAILED",
+            message: "An error occurred while fetching the summary.",
+        });
+    }
+});
+
+
 module.exports = router;
