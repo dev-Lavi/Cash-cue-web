@@ -203,8 +203,8 @@ router.delete('/delete/:expenseId', authenticate, async (req, res) => {
     }
 });
 
-// Get all transactions of the current day for the authenticated user
-router.get('/graph1', authenticate, async (req, res) => {
+//todays data with india time zone
+router.get('/graph1', authenticate, async (req, res) => {  
     try {
         // Find the authenticated user by their ID
         const user = await User.findById(req.user.id);
@@ -216,42 +216,43 @@ router.get('/graph1', authenticate, async (req, res) => {
             });
         }
 
-        // Get the current date in UTC
-        const today = new Date();
-        const utcToday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+        // Get the current date and time in IST
+        const now = new Date();
+        const istOffset = 5 * 60 + 30; // IST offset in minutes
+        const istMidnight = new Date(now.getTime() + (istOffset * 60 * 1000));
+        istMidnight.setUTCHours(0, 0, 0, 0); // Set to 00:00 IST
 
-        // Filter transactions for the current day in UTC and map the required fields
-        const transactions = user.transactions
-            .filter(transaction => {
-                const transactionDate = new Date(transaction.date);
-                return (
-                    transactionDate.getUTCDate() === utcToday.getUTCDate() &&
-                    transactionDate.getUTCMonth() === utcToday.getUTCMonth() &&
-                    transactionDate.getUTCFullYear() === utcToday.getUTCFullYear()
-                );
-            })
-            .map(transaction => {
-                const transactionDate = new Date(transaction.date);
-                const hours = String(transactionDate.getUTCHours()).padStart(2, '0');
-                const minutes = String(transactionDate.getUTCMinutes()).padStart(2, '0');
+        // Filter transactions that occurred after 00:00 IST today
+        const todayTransactions = user.transactions.filter(transaction => {
+            const transactionDate = new Date(transaction.date); // Parse transaction date
+            return transactionDate >= istMidnight; // Compare with today's 00:00 IST timestamp
+        });
 
-                return {
-                    type: transaction.type, // Include only type (e.g., "Expense" or "Income")
-                    amount: transaction.amount, // Include the transaction amount
-                    time: `${hours}:${minutes}`, // Format time as HH:mm in UTC
-                };
-            });
+        // Format transactions for the frontend
+        const formattedTransactions = todayTransactions.map(transaction => {
+            const transactionDate = new Date(transaction.date);
+            const hours = String(transactionDate.getHours()).padStart(2, '0'); // IST hours
+            const minutes = String(transactionDate.getMinutes()).padStart(2, '0'); // IST minutes
 
-        // Respond with the filtered transactions
-        res.json({
+            return {
+                type: transaction.type, // Include type (e.g., "Expense" or "Income")
+                amount: transaction.amount, // Include the transaction amount
+                time: `${hours}:${minutes}`, // Format time as HH:mm in IST
+            };
+        });
+
+        // Respond with today's transactions
+        res.status(200).json({
             status: "SUCCESS",
-            transactions,
+            message: "Today's transactions fetched successfully.",
+            data: formattedTransactions,
         });
     } catch (error) {
-        console.error(error);
+        console.error('Error fetching transactions:', error.message);
+
         res.status(500).json({
             status: "FAILED",
-            message: "An error occurred while fetching transactions.",
+            message: "An error occurred while fetching today's transactions.",
         });
     }
 });
