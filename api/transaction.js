@@ -257,7 +257,7 @@ router.get('/graph1', authenticate, async (req, res) => {
     }
 });
 
-//get weekly data
+// Get weekly data (IST)
 router.get('/graph2', authenticate, async (req, res) => {
     try {
         console.log('Fetching user data...');
@@ -273,34 +273,43 @@ router.get('/graph2', authenticate, async (req, res) => {
             });
         }
 
-        console.log('Processing transactions for the last 7 days...');
+        console.log('Processing transactions for the last 7 days (IST)...');
 
-        // Get today's date and calculate the date 7 days ago
-        const today = new Date();
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(today.getDate() - 6); // Include today in the 7-day window
+        // Get today's date in IST
+        const now = new Date();
+        const istOffset = 5 * 60 + 30; // IST offset in minutes
+        const istNow = new Date(now.getTime() + istOffset * 60 * 1000);
+
+        // Calculate the start of the 7-day period (00:00 IST, 7 days ago)
+        const istMidnightToday = new Date(istNow);
+        istMidnightToday.setUTCHours(0, 0, 0, 0);
+
+        const istSevenDaysAgo = new Date(istMidnightToday);
+        istSevenDaysAgo.setDate(istSevenDaysAgo.getDate() - 6);
 
         // Initialize data structure to hold totals for the last 7 days
         const totals = {};
 
         // Populate the totals object with default values for each day
         for (let i = 0; i < 7; i++) {
-            const date = new Date();
-            date.setDate(sevenDaysAgo.getDate() + i);
+            const date = new Date(istSevenDaysAgo);
+            date.setDate(istSevenDaysAgo.getDate() + i);
             const formattedDate = date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
             totals[formattedDate] = { totalIncome: 0, totalExpense: 0 };
         }
 
         // Process transactions to calculate totals
         user.transactions.forEach((transaction) => {
-            const transactionDate = new Date(transaction.date).toISOString().split('T')[0]; // Format as YYYY-MM-DD
+            const transactionDate = new Date(transaction.date);
+            const istTransactionDate = new Date(transactionDate.getTime() + istOffset * 60 * 1000);
+            const formattedTransactionDate = istTransactionDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
 
             // Check if the transaction date is within the last 7 days
-            if (totals[transactionDate]) {
+            if (totals[formattedTransactionDate]) {
                 if (transaction.type === 'Income') {
-                    totals[transactionDate].totalIncome += transaction.amount;
+                    totals[formattedTransactionDate].totalIncome += transaction.amount;
                 } else if (transaction.type === 'Expense') {
-                    totals[transactionDate].totalExpense += transaction.amount;
+                    totals[formattedTransactionDate].totalExpense += transaction.amount;
                 }
             }
         });
@@ -312,7 +321,7 @@ router.get('/graph2', authenticate, async (req, res) => {
             totalExpense: totals[date].totalExpense,
         }));
 
-        console.log('Summary for the last 7 days:', result);
+        console.log('Summary for the last 7 days (IST):', result);
 
         // Respond with the calculated totals
         res.status(200).json({
