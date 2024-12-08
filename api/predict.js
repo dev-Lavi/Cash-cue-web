@@ -45,10 +45,14 @@ router.get('/expense', authenticate, async (req, res) => {
 
         console.log('ML API response:', response.data);
 
+        // Send the prediction to the frontend
         res.status(200).json({
             status: "SUCCESS",
             message: "Expense prediction fetched successfully!",
-            data: response.data,
+            data: {
+                predictions: response.data, // Predictions from ML API
+                transactions: payload, // Original expense transactions for reference
+            },
         });
     } catch (error) {
         console.error('Error:', error.message);
