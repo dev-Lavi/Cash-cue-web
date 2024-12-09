@@ -340,7 +340,7 @@ router.get('/graph2', authenticate, async (req, res) => {
     }
 });
 
-// Last month transaction (in IST)
+//graph 3
 router.get('/graph3', authenticate, async (req, res) => {
     try {
         console.log('Fetching user data...');
@@ -364,25 +364,16 @@ router.get('/graph3', authenticate, async (req, res) => {
         const istNow = new Date(now.getTime() + istOffset * 60 * 1000);
 
         // Get today's date in IST
-        const today = istNow;
+        const today = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate());
 
-        const currentDayOfWeek = today.getDay(); // 0 for Sunday, 1 for Monday, etc.
-        const startOfWeek = new Date(today.getTime() - currentDayOfWeek * 24 * 60 * 60 * 1000); // Start of the current week
-
-        // Define the start and end dates for the last 4 weeks in IST
         const weeks = Array.from({ length: 4 }, (_, i) => {
-            const end = new Date(startOfWeek.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+            const end = new Date(today.getTime() - i * 7 * 24 * 60 * 60 * 1000);
             const start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
-            
-            // Format start and end dates as YYYY-MM-DD in IST
-            const formatDate = (date) => {
-                return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
-            };
 
             return {
                 weekLabel: `Week ${4 - i}`,
-                start: formatDate(start),
-                end: formatDate(end),
+                start,
+                end,
             };
         });
 
@@ -400,12 +391,9 @@ router.get('/graph3', authenticate, async (req, res) => {
 
             // Check which week this transaction belongs to
             for (let i = 0; i < weeks.length; i++) {
-                const week = weeks[i];
-                const startDate = new Date(week.start);
-                const endDate = new Date(week.end);
+                const { start, end } = weeks[i];
 
-                // Adjust start and end date to IST
-                if (istTransactionDate >= startDate && istTransactionDate <= endDate) {
+                if (istTransactionDate >= start && istTransactionDate <= end) {
                     if (transaction.type === 'Income') {
                         weeklyTotals[i].totalIncome += transaction.amount;
                     } else if (transaction.type === 'Expense') {
@@ -434,5 +422,6 @@ router.get('/graph3', authenticate, async (req, res) => {
         });
     }
 });
+
 
 module.exports = router;
