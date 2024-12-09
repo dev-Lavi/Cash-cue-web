@@ -4,7 +4,7 @@ const User = require('../models/User');
 const authenticate = require('../middleware/authenticate');
 const moment = require('moment'); // For date manipulation
 
-router.get('/home', authenticate, async (req, res) => {
+router.get('/home', authenticate, async (req, res) => { 
     try {
         // Fetch the user from the database
         const user = await User.findById(req.user.id);
@@ -33,27 +33,40 @@ router.get('/home', authenticate, async (req, res) => {
         // Calculate remaining balance
         const remainingBalance = initialBalance + totalIncome - totalExpense;
 
-        // Group expenses by day, week, and month for average calculations
-        const currentDate = moment();
+        // Indian Timezone Offset (IST = UTC + 5:30)
+        const IST_OFFSET = 330; // 5 hours 30 minutes in minutes
 
-        const dailyExpenses = expenseTransactions.filter(t =>
-            moment(t.date).isBetween(moment().startOf('day'), moment().endOf('day'))
-        );
-        const weeklyExpenses = expenseTransactions.filter(t =>
-            moment(t.date).isSame(currentDate, 'week')
-        );
-        const monthlyExpenses = expenseTransactions.filter(t =>
-            moment(t.date).isSame(currentDate, 'month')
-        );
+        // Current date in IST
+        const currentISTDate = new Date(new Date().getTime() + IST_OFFSET * 60 * 1000);
 
-        
+        // Get start of day, week, and month in IST
+        const startOfDayIST = new Date(currentISTDate.getFullYear(), currentISTDate.getMonth(), currentISTDate.getDate());
+        const startOfWeekIST = new Date(startOfDayIST);
+        startOfWeekIST.setDate(startOfWeekIST.getDate() - startOfDayIST.getDay());
+        const startOfMonthIST = new Date(currentISTDate.getFullYear(), currentISTDate.getMonth(), 1);
+
+        // Filter transactions based on IST time
+        const dailyExpenses = expenseTransactions.filter(t => {
+            const transactionDate = new Date(new Date(t.date).getTime() + IST_OFFSET * 60 * 1000);
+            return transactionDate >= startOfDayIST;
+        });
+        const weeklyExpenses = expenseTransactions.filter(t => {
+            const transactionDate = new Date(new Date(t.date).getTime() + IST_OFFSET * 60 * 1000);
+            return transactionDate >= startOfWeekIST;
+        });
+        const monthlyExpenses = expenseTransactions.filter(t => {
+            const transactionDate = new Date(new Date(t.date).getTime() + IST_OFFSET * 60 * 1000);
+            return transactionDate >= startOfMonthIST;
+        });
+
+        // Calculate totals for each period
         const dailyExpenseTotal = dailyExpenses.reduce((sum, t) => sum + t.amount, 0);
         const weeklyExpenseTotal = weeklyExpenses.reduce((sum, t) => sum + t.amount, 0);
         const monthlyExpenseTotal = monthlyExpenses.reduce((sum, t) => sum + t.amount, 0);
 
         const averageDailyExpense = dailyExpenseTotal;
         const averageWeeklyExpense = weeklyExpenseTotal / 7;
-        const averageMonthlyExpense = monthlyExpenseTotal / currentDate.daysInMonth();
+        const averageMonthlyExpense = monthlyExpenseTotal / new Date(currentISTDate.getFullYear(), currentISTDate.getMonth() + 1, 0).getDate();
 
         // Send response
         return res.status(200).json({
@@ -76,5 +89,6 @@ router.get('/home', authenticate, async (req, res) => {
         });
     }
 });
+
 
 module.exports = router; 
