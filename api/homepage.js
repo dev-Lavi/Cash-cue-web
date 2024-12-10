@@ -4,7 +4,7 @@ const User = require('../models/User');
 const authenticate = require('../middleware/authenticate');
 const moment = require('moment'); // For date manipulation
 
-router.get('/home', authenticate, async (req, res) => {
+router.get('/home', authenticate, async (req, res) => { 
     try {
         // Fetch the user from the database
         const user = await User.findById(req.user.id);
@@ -39,31 +39,41 @@ router.get('/home', authenticate, async (req, res) => {
         // Current date in IST
         const currentISTDate = new Date(new Date().getTime() + IST_OFFSET * 60 * 1000);
 
-        // Date ranges for the last 7 days and last 28 days
-        const last7DaysStart = new Date(currentISTDate);
-        last7DaysStart.setDate(last7DaysStart.getDate() - 7);
+        // Get date ranges for last 3 weeks and last 3 months
+        const lastWeekStart = new Date(currentISTDate);
+        const threeWeeksAgoStart = new Date(currentISTDate);
+        lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+        threeWeeksAgoStart.setDate(threeWeeksAgoStart.getDate() - 21);
 
-        const last28DaysStart = new Date(currentISTDate);
-        last28DaysStart.setDate(last28DaysStart.getDate() - 28);
+        const oneMonthAgoStart = new Date(currentISTDate);
+        const threeMonthsAgoStart = new Date(currentISTDate);
+        oneMonthAgoStart.setMonth(oneMonthAgoStart.getMonth() - 1);
+        threeMonthsAgoStart.setMonth(threeMonthsAgoStart.getMonth() - 3);
 
-        // Filter transactions based on the last 7 and 28 days
-        const last7DaysExpenses = expenseTransactions.filter(t => {
+        // Filter transactions based on the last 3 weeks and last 3 months
+        const last3WeeksExpenses = expenseTransactions.filter(t => {
             const transactionDate = new Date(new Date(t.date).getTime() + IST_OFFSET * 60 * 1000);
-            return transactionDate >= last7DaysStart;
+            return transactionDate >= threeWeeksAgoStart && transactionDate <= currentISTDate;
         });
 
-        const last28DaysExpenses = expenseTransactions.filter(t => {
+        const last3MonthsExpenses = expenseTransactions.filter(t => {
             const transactionDate = new Date(new Date(t.date).getTime() + IST_OFFSET * 60 * 1000);
-            return transactionDate >= last28DaysStart;
+            return transactionDate >= threeMonthsAgoStart && transactionDate <= currentISTDate;
         });
 
         // Calculate totals for each period
-        const last7DaysTotal = last7DaysExpenses.reduce((sum, t) => sum + t.amount, 0);
-        const last28DaysTotal = last28DaysExpenses.reduce((sum, t) => sum + t.amount, 0);
+        const totalLast3WeeksExpense = last3WeeksExpenses.reduce((sum, t) => sum + t.amount, 0);
+        const totalLast3MonthsExpense = last3MonthsExpenses.reduce((sum, t) => sum + t.amount, 0);
 
         // Calculate averages
-        const averageWeeklyExpense = last7DaysTotal / 7;
-        const averageMonthlyExpense = last28DaysTotal / 28;
+        const averageDailyExpense = totalExpense / new Set(
+            expenseTransactions.map(t => 
+                new Date(new Date(t.date).getTime() + IST_OFFSET * 60 * 1000).toISOString().split('T')[0]
+            )
+        ).size || 0;
+
+        const averageWeeklyExpense = totalLast3WeeksExpense / 3;
+        const averageMonthlyExpense = totalLast3MonthsExpense / 3;
 
         // Send response
         return res.status(200).json({
@@ -73,6 +83,7 @@ router.get('/home', authenticate, async (req, res) => {
                 totalIncome,
                 totalExpense,
                 remainingBalance,
+                averageDailyExpense: averageDailyExpense.toFixed(2),
                 averageWeeklyExpense: averageWeeklyExpense.toFixed(2),
                 averageMonthlyExpense: averageMonthlyExpense.toFixed(2),
             },
