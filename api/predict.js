@@ -4,7 +4,6 @@ const axios = require('axios'); // For communicating with the ML worker
 const authenticate = require('../middleware/authenticate');
 const User = require('../models/User');
 
-//to predict expense of future
 router.get('/expense', authenticate, async (req, res) => {
     try {
         console.log('Fetching user data...');
@@ -32,41 +31,12 @@ router.get('/expense', authenticate, async (req, res) => {
             });
         }
 
-        // Helper function to calculate total expenses for a specific date
-        const calculateTotalForDate = (targetDate) => {
-            return expenseTransactions
-                .filter((t) => t.date === targetDate)
-                .reduce((total, t) => total + t.amount, 0);
-        };
-
-        // Get today's, yesterday's, and day before yesterday's dates
-        const today = new Date();
-        const yesterday = new Date(today);
-        yesterday.setDate(today.getDate() - 1);
-        const dayBeforeYesterday = new Date(today);
-        dayBeforeYesterday.setDate(today.getDate() - 2);
-
-        const formatDate = (date) => date.toISOString().split('T')[0];
-
-        // Prepare payload with date and totals
-        const payload = [
-            {
-                date: formatDate(today),
-                totalExpense: calculateTotalForDate(formatDate(today)),
-            },
-            {
-                date: formatDate(yesterday),
-                totalExpense: calculateTotalForDate(formatDate(yesterday)),
-            },
-            {
-                date: formatDate(dayBeforeYesterday),
-                totalExpense: calculateTotalForDate(formatDate(dayBeforeYesterday)),
-            },
-        ];
+        // Limit to 100 transactions for testing
+        const MAX_TRANSACTIONS = 100;
+        const payload = expenseTransactions.slice(0, MAX_TRANSACTIONS);
 
         console.log('Sending data to ML API...', payload);
 
-        // Send data to ML API
         const response = await axios.post(
             'https://expense-forecasting-z2lq.onrender.com/forecast',
             payload,
@@ -75,13 +45,13 @@ router.get('/expense', authenticate, async (req, res) => {
 
         console.log('ML API response:', response.data);
 
-        // Send the prediction to the frontend
-        res.status(200).json({
+         // Send the prediction to the frontend
+         res.status(200).json({
             status: "SUCCESS",
             message: "Expense prediction fetched successfully!",
             data: {
                 predictions: response.data, // Predictions from ML API
-                transactions: payload, // Dates and totals for reference
+                transactions: payload, // Original expense transactions for reference
             },
         });
     } catch (error) {
