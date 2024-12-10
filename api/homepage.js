@@ -97,6 +97,30 @@ router.get('/home', authenticate, async (req, res) => {
     }
 });
 
+router.get('/name', authenticate, async (req, res) => {
+    try {
+        // Find the authenticated user by their ID
+        const user = await User.findById(req.user.id);
 
+        if (!user) {
+            return res.status(404).json({
+                status: "FAILED",
+                message: "User not found.",
+            });
+        }
+
+        // Respond with the user's name
+        res.json({
+            status: "SUCCESS",
+            name: user.name, // Assuming the User model has a 'name' field
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            status: "FAILED",
+            message: "An error occurred while fetching the user's name.",
+        });
+    }
+});
 
 module.exports = router; 
