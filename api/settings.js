@@ -50,4 +50,49 @@ router.put('/balance', authenticate, async (req, res) => {
     }
 });
 
+router.put('/name', authenticate, async (req, res) => {
+    try {
+        // Extract the new name from the request body
+        const { name } = req.body;
+        const userId = req.user.id;
+
+        // Validate the input
+        if (!name || typeof name !== 'string' || name.trim().length === 0) {
+            return res.status(400).json({
+                status: "FAILED",
+                message: "Invalid name. It must be a non-empty string.",
+            });
+        }
+
+        // Find the user by ID
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({
+                status: "FAILED",
+                message: "User not found.",
+            });
+        }
+
+        // Update the user's name
+        user.name = name.trim();
+        await user.save();
+
+        // Respond with the updated name
+        return res.status(200).json({
+            status: "SUCCESS",
+            message: "User name updated successfully!",
+            data: {
+                name: user.name,
+            },
+        });
+    } catch (error) {
+        console.error("Error updating user name:", error);
+        return res.status(500).json({
+            status: "FAILED",
+            message: "An error occurred while updating the user name.",
+        });
+    }
+});
+
 module.exports = router;
