@@ -257,7 +257,7 @@ router.get('/graph1', authenticate, async (req, res) => {
     }
 });
 
-// Get weekly data (IST)
+//graph 2
 router.get('/graph2', authenticate, async (req, res) => {
     try {
         console.log('Fetching user data...');
@@ -273,36 +273,38 @@ router.get('/graph2', authenticate, async (req, res) => {
             });
         }
 
-        console.log('Processing transactions for the last 7 days (IST)...');
+        console.log('Processing transactions for the last 7 days (UTC)...');
 
-        // Get today's date in IST
+        // Get today's date in UTC (no offset needed)
         const now = new Date();
-        const istOffset = 5 * 60 + 30; // IST offset in minutes
-        const istNow = new Date(now.getTime() + istOffset * 60 * 1000);
 
-        // Calculate the start of the 7-day period (00:00 IST, 7 days ago)
-        const istMidnightToday = new Date(istNow);
-        istMidnightToday.setUTCHours(0, 0, 0, 0);
+        // Calculate the start of the 7-day period (00:00 UTC, 7 days ago)
+        const utcMidnightToday = new Date(now);
+        utcMidnightToday.setUTCHours(0, 0, 0, 0); // Set to 00:00 UTC
 
-        const istSevenDaysAgo = new Date(istMidnightToday);
-        istSevenDaysAgo.setDate(istSevenDaysAgo.getDate() - 6);
+        const utcSevenDaysAgo = new Date(utcMidnightToday);
+        utcSevenDaysAgo.setDate(utcSevenDaysAgo.getDate() - 6); // 7 days ago (including today)
 
         // Initialize data structure to hold totals for the last 7 days
         const totals = {};
 
         // Populate the totals object with default values for each day
         for (let i = 0; i < 7; i++) {
-            const date = new Date(istSevenDaysAgo);
-            date.setDate(istSevenDaysAgo.getDate() + i);
+            const date = new Date(utcSevenDaysAgo);
+            date.setDate(utcSevenDaysAgo.getDate() + i);
             const formattedDate = date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
             totals[formattedDate] = { totalIncome: 0, totalExpense: 0 };
         }
 
+        console.log('Initial Totals:', totals);
+
         // Process transactions to calculate totals
         user.transactions.forEach((transaction) => {
             const transactionDate = new Date(transaction.date);
-            const istTransactionDate = new Date(transactionDate.getTime() + istOffset * 60 * 1000);
-            const formattedTransactionDate = istTransactionDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+            const formattedTransactionDate = transactionDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+
+            console.log('Processing transaction:', transaction);
+            console.log('Formatted Transaction Date (UTC):', formattedTransactionDate);
 
             // Check if the transaction date is within the last 7 days
             if (totals[formattedTransactionDate]) {
@@ -314,6 +316,8 @@ router.get('/graph2', authenticate, async (req, res) => {
             }
         });
 
+        console.log('Final Totals:', totals);
+
         // Prepare the result as an array for easier graph plotting
         const result = Object.keys(totals).map((date) => ({
             date,
@@ -321,7 +325,7 @@ router.get('/graph2', authenticate, async (req, res) => {
             totalExpense: totals[date].totalExpense,
         }));
 
-        console.log('Summary for the last 7 days (IST):', result);
+        console.log('Summary for the last 7 days (UTC):', result);
 
         // Respond with the calculated totals
         res.status(200).json({
@@ -340,7 +344,7 @@ router.get('/graph2', authenticate, async (req, res) => {
     }
 });
 
-//graph 3
+
 router.get('/graph3', authenticate, async (req, res) => {
     try {
         console.log('Fetching user data...');
@@ -356,22 +360,18 @@ router.get('/graph3', authenticate, async (req, res) => {
             });
         }
 
-        console.log('Processing transactions for the last 4 weeks (IST)...');
+        console.log('Processing transactions for the last 4 weeks (UTC)...');
 
-        // Get current date in IST (UTC +5:30)
+        // Get current date in UTC
         const now = new Date();
-        const istOffset = 5 * 60 + 30; // IST offset in minutes
-        const istNow = new Date(now.getTime() + istOffset * 60 * 1000);
-
-        // Get today's date in IST
-        const today = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate());
+        const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
         const weeks = Array.from({ length: 4 }, (_, i) => {
             const end = new Date(today.getTime() - i * 7 * 24 * 60 * 60 * 1000);
             const start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
 
             return {
-                weekLabel: `Week ${4 - i}`,
+                weekLabel: `Week ${i + 1}`, // Week starts from 1 to 4 now
                 start,
                 end,
             };
@@ -386,14 +386,14 @@ router.get('/graph3', authenticate, async (req, res) => {
 
         // Process transactions and group by week
         user.transactions.forEach((transaction) => {
-            const transactionDate = new Date(transaction.date);
-            const istTransactionDate = new Date(transactionDate.getTime() + istOffset * 60 * 1000); // Adjust to IST
+            const transactionDate = new Date(transaction.date); // Already stored in UTC
+            const formattedTransactionDate = new Date(Date.UTC(transactionDate.getUTCFullYear(), transactionDate.getUTCMonth(), transactionDate.getUTCDate()));
 
             // Check which week this transaction belongs to
             for (let i = 0; i < weeks.length; i++) {
                 const { start, end } = weeks[i];
 
-                if (istTransactionDate >= start && istTransactionDate <= end) {
+                if (formattedTransactionDate >= start && formattedTransactionDate <= end) {
                     if (transaction.type === 'Income') {
                         weeklyTotals[i].totalIncome += transaction.amount;
                     } else if (transaction.type === 'Expense') {
@@ -404,7 +404,7 @@ router.get('/graph3', authenticate, async (req, res) => {
             }
         });
 
-        console.log('Summary for the last 4 weeks (IST):', weeklyTotals);
+        console.log('Summary for the last 4 weeks (UTC):', weeklyTotals);
 
         // Respond with the calculated weekly totals
         res.status(200).json({
@@ -422,6 +422,8 @@ router.get('/graph3', authenticate, async (req, res) => {
         });
     }
 });
+
+
 
 
 module.exports = router;
