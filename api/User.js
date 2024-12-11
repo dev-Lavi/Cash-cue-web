@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken'); // For creating and verifying JWTs
 const passport = require('passport'); // Add Passport
 const nodemailer = require('nodemailer');
+const Group = require('../models/group');
 require('dotenv').config();
 
 const JWT_SECRET = "your_jwt_secret"; // Replace with a strong secret key
@@ -218,6 +219,11 @@ router.post('/signin', async (req, res) => {
             return res.json({ status: "FAILED", errorCode: 3004, message: "Invalid password!" });
         }
 
+        // Fetch groups where the user is a member
+        const groups = await Group.find({ 'members.email': email }, '_id'); // Fetch only group IDs
+        const groupIds = groups.map(group => group._id);
+
+
          // Generate JWT Token
          const token = jwt.sign(
             { id: user._id, email: user.email }, // Payload
@@ -229,7 +235,8 @@ router.post('/signin', async (req, res) => {
             status: "SUCCESS",
             message: "Sign-in successful!",
             token, // Include the JWT token in the response
-            data: { id: user._id, name: user.name, email: user.email }, // Optional user data
+            data: { id: user._id, name: user.name, email: user.email, groups: groupIds, }, // Optional user data
+            
         });
     } catch (error) {
         console.error(error);
