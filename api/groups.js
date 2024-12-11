@@ -157,6 +157,7 @@ router.get('/group/:groupId', authenticate, async (req, res) => {
                 description: group.description,
                 members: group.members, // Includes email and name
                 transactions: group.transactions.map(transaction => ({
+                    transactionId: transaction._id,
                     description: transaction.description,
                     amount: transaction.amount,
                     date: transaction.date,
@@ -174,5 +175,54 @@ router.get('/group/:groupId', authenticate, async (req, res) => {
     }
 });
 
+// Route to mark a member's share as paid
+router.post('/group/:groupId/transaction/:transactionId/pay', authenticate, async (req, res) => {
+    const { groupId, transactionId } = req.params;
+    const { memberEmail } = req.body;
+
+    if (!memberEmail) {
+        return res.status(400).json({
+            status: "FAILED",
+            message: "Member email is required.",
+        });
+    }
+
+    try {
+        // Update the specific split detail's paid status directly
+        const group = await Group.findOneAndUpdate(
+            { _id: groupId, 'transactions._id': transactionId, 'transactions.splitDetails.memberEmail': memberEmail },
+            {
+                $set: {
+                    'transactions.$[transaction].splitDetails.$[splitDetail].paid': true,
+                },
+            },
+            {
+                arrayFilters: [
+                    { 'transaction._id': transactionId },
+                    { 'splitDetail.memberEmail': memberEmail },
+                ],
+                new: true, // Return the updated document
+            }
+        );
+
+        if (!group) {
+            return res.status(404).json({
+                status: "FAILED",
+                message: "Group, transaction, or member not found.",
+            });
+        }
+
+        res.status(200).json({
+            status: "SUCCESS",
+            message: "Share marked as paid successfully.",
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            status: "FAILED",
+            message: "An error occurred while updating the payment status.",
+        });
+    }
+});
 
 module.exports = router;
