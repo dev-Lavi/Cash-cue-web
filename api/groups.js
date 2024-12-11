@@ -4,16 +4,16 @@ const Group = require('../models/group');
 const User = require('../models/User');
 const authenticate = require('../middleware/authenticate');
 
-// Create a new group
+// Create a new group 
 router.post('/create', authenticate, async (req, res) => {
     try {
         const { title, description, members } = req.body;
 
         // Validate input
-        if (!title || !members || !Array.isArray(members)) {
+        if (!title || !description || !members || !Array.isArray(members)) {
             return res.status(400).json({
                 status: "FAILED",
-                message: "Title and members are required, and members must be an array of email addresses.",
+                message: "Title, description, and members are required, and members must be an array of email addresses.",
             });
         }
 
@@ -30,10 +30,10 @@ router.post('/create', authenticate, async (req, res) => {
             });
         }
 
-        // Prepare members with user IDs
+        // Prepare members with email and name
         const memberData = userRecords.map(user => ({
-            userId: user._id,
             email: user.email,
+            name: user.name,  // Assuming User model contains a 'name' field
         }));
 
         // Create the group
@@ -60,22 +60,22 @@ router.post('/create', authenticate, async (req, res) => {
 });
 
 
-// Add a transaction to a group
-router.post('/group/:groupId/transaction', authenticate, async (req, res) => {
+// Add an expense to a group
+router.post('/add-expense', authenticate, async (req, res) => {
     try {
-        const { groupId } = req.params;
-        const { description, amount, splitType } = req.body;
+        const { groupId, amount, date, description } = req.body;
+        const initiatorEmail = req.user.email; // Assuming 'req.user' contains the authenticated user's data
 
         // Validate input
-        if (!description || !amount || !splitType) {
+        if (!groupId || !amount || !date || !description) {
             return res.status(400).json({
                 status: "FAILED",
-                message: "Description, amount, and splitType are required.",
+                message: "Group ID, amount, date, and description are required.",
             });
         }
 
-        // Find the group by ID and populate members
-        const group = await Group.findById(groupId).populate('members', 'name');
+        // Fetch the group
+        const group = await Group.findById(groupId);
         if (!group) {
             return res.status(404).json({
                 status: "FAILED",
@@ -83,79 +83,63 @@ router.post('/group/:groupId/transaction', authenticate, async (req, res) => {
             });
         }
 
-        // Validate split type
-        if (!['equally', 'unequally', 'percentage'].includes(splitType)) {
-            return res.status(400).json({
-                status: "FAILED",
-                message: "Invalid splitType. Allowed values are 'equally', 'unequally', 'percentage'.",
-            });
-        }
-
-        // Fetch the user's name from the database (initiator of the transaction)
-        const user = await User.findById(req.user._id); // Assuming User is your user model
-        if (!user) {
+        // Check if the initiator email exists in the group members
+        const initiator = group.members.find(member => member.email === initiatorEmail);
+        if (!initiator) {
             return res.status(404).json({
                 status: "FAILED",
-                message: "User not found.",
+                message: "Initiator email not found in the group members.",
             });
         }
 
-        // Exclude the user who initiated the expense from the equal split
-        const nonInitiatorMembers = group.members.filter(member => member._id.toString() !== req.user._id.toString());
-        
-        // If there are no members left to split the amount, return an error
-        if (nonInitiatorMembers.length === 0) {
-            return res.status(400).json({
-                status: "FAILED",
-                message: "There must be at least one other member to split the expense.",
-            });
-        }
-
-        // Calculate the equal share for each non-initiating member
-        const equalShare = amount / nonInitiatorMembers.length;
-
-        // Prepare the split details
-        const updatedSplitDetails = nonInitiatorMembers.map(member => ({
-            member: member.name,
-            share: equalShare,
-        }));
-
-        // Create the transaction object
-        const transaction = {
+        // Create the new expense transaction
+        const newTransaction = {
             description,
             amount,
-            splitType,
-            initiatedBy: user.name, // Include the user's name
-            splitDetails: updatedSplitDetails,
+            date,
+            initiatedBy: initiatorEmail, // Use the authenticated user's email
+            splitDetails: [],
         };
 
-        // Add the transaction to the group
-        group.transactions.push(transaction);
+        // Calculate the split for each member except the initiator
+        const nonInitiatorMembers = group.members.filter(member => member.email !== initiatorEmail);
+        const equalShare = amount / nonInitiatorMembers.length;
+
+        // Prepare split details for each member
+        newTransaction.splitDetails = nonInitiatorMembers.map(member => ({
+            memberEmail: member.email,
+            share: equalShare,
+            paid: false, // Initially, no one has paid
+        }));
+
+        // Save the transaction in the group
+        group.transactions.push(newTransaction);
         await group.save();
 
         res.status(201).json({
             status: "SUCCESS",
-            message: "Transaction added successfully!",
-            transaction,
+            message: "Expense added successfully!",
+            transaction: newTransaction,
         });
     } catch (error) {
         console.error(error);
         res.status(500).json({
             status: "FAILED",
-            message: "An error occurred while adding the transaction.",
+            message: "An error occurred while adding the expense.",
         });
     }
 });
 
 
-router.get('/groups/:groupId', authenticate, async (req, res) => {
+ 
+
+// Get group data
+router.get('/group/:groupId', authenticate, async (req, res) => {
     try {
         const { groupId } = req.params;
 
-        const group = await Group.findById(groupId)
-            .populate('members', 'name email') // Populate members
-            .populate('transactions.initiatedBy', 'name email') // Populate initiators
-            .populate('transactions.splitDetails.member', 'name email'); // Populate split details
+        // Fetch the group data from the database
+        const group = await Group.findById(groupId).populate('transactions.splitDetails.memberEmail', 'email name'); // Populating member details
 
         if (!group) {
             return res.status(404).json({
@@ -164,15 +148,28 @@ router.get('/groups/:groupId', authenticate, async (req, res) => {
             });
         }
 
+        // Return the group data
         res.status(200).json({
             status: "SUCCESS",
-            group,
+            message: "Group data fetched successfully!",
+            group: {
+                title: group.title,
+                description: group.description,
+                members: group.members, // Includes email and name
+                transactions: group.transactions.map(transaction => ({
+                    description: transaction.description,
+                    amount: transaction.amount,
+                    date: transaction.date,
+                    initiatedBy: transaction.initiatedBy,
+                    splitDetails: transaction.splitDetails,
+                })),
+            },
         });
     } catch (error) {
         console.error(error);
         res.status(500).json({
             status: "FAILED",
-            message: "An error occurred while fetching the group details.",
+            message: "An error occurred while fetching the group data.",
         });
     }
 });
