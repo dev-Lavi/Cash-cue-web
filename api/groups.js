@@ -48,7 +48,12 @@ router.post('/create', authenticate, async (req, res) => {
         res.status(201).json({
             status: "SUCCESS",
             message: "Group created successfully!",
-            group: newGroup,
+            group: {
+                id: newGroup._id,  // Explicitly sending the group ID
+                title: newGroup.title,
+                description: newGroup.description,
+                members: newGroup.members,
+            },
         });
     } catch (error) {
         console.error(error);
