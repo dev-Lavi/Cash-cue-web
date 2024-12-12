@@ -22,7 +22,7 @@ const port = process.env.PORT || 3002;
 
 const cors = require('cors'); // Import CORS
 app.use(cors({
-    origin: 'http://localhost:5173',
+    origin: ['http://localhost:5173', 'https://expense-tracker-nine-wine.vercel.app/'],
     credentials: true,  
 }));
 
