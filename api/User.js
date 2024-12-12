@@ -288,7 +288,7 @@ router.post('/forgot-password', (req, res) => {
                     html: `
                         <p>You requested a password reset</p>
                         <p>Click the link below to reset your password:</p>
-                        <a href="${process.env.FRONTEND_URL}/reset-password/${resetToken}">Reset Password</a>
+                        <a href="${process.env.FRONTEND_URL}/user/reset-password/${resetToken}">Reset Password</a>
                         <p>This link will expire in 15 minutes.</p>
                     `
                 };
