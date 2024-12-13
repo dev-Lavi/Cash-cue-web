@@ -114,7 +114,7 @@ router.post('/signup', async (req, res) => {
         const verificationToken = jwt.sign(
             { id: savedUser._id, email: savedUser.email },
             JWT_SECRET,
-            { expiresIn: "30m" } // Token valid for 1 hour
+            { expiresIn: "1y" } // Token valid for 1 hour
         );
 
         // Send verification email
