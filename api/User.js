@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken'); // For creating and verifying JWTs
 const passport = require('passport'); // Add Passport
 const nodemailer = require('nodemailer');
+const otpStore = new Map(); // Store OTPs temporarily
 const Group = require('../models/group');
 require('dotenv').config();
 
@@ -82,7 +83,6 @@ router.post('/signup', async (req, res) => {
         return res.json({ status: "FAILED", errorCode: 1003, message: "Invalid email entered" });
     }
 
-    // Password validation: At least 8 characters, 1 number, and 1 symbol
     const passwordRegex = /^(?=.*[0-9])(?=.*[!@#$%^&*])[a-zA-Z0-9!@#$%^&*]{8,}$/;
     if (!passwordRegex.test(password)) {
         return res.json({
@@ -91,7 +91,6 @@ router.post('/signup', async (req, res) => {
             message: "Password must be at least 8 characters long and include at least one number and one symbol.",
         });
     }
-
 
     try {
         const existingUser = await User.findOne({ email });
@@ -103,48 +102,33 @@ router.post('/signup', async (req, res) => {
             });
         }
 
-        // Hash the password
-        const hashedPassword = await bcrypt.hash(password, 10);
+        // Generate OTP
+        const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit OTP
 
-        // Create a new user
-        const newUser = new User({ name, email, password: hashedPassword });
-        const savedUser = await newUser.save();
+        // Store OTP with email temporarily
+        otpStore.set(email, { otp, name, password, createdAt: Date.now() });
 
-        // Generate verification token
-        const verificationToken = jwt.sign(
-            { id: savedUser._id, email: savedUser.email },
-            JWT_SECRET,
-            { expiresIn: "1y" } // Token valid for 1 hour
-        );
-
-        // Send verification email
+        // Send OTP via Gmail
         const transporter = nodemailer.createTransport({
             service: "gmail",
             auth: {
-                user: process.env.EMAIL, // Your email
-                pass: process.env.EMAIL_PASSWORD, // Your email password
+                user: process.env.EMAIL, 
+                pass: process.env.EMAIL_PASSWORD, 
             },
         });
-
-        const verificationLink = `https://cash-cue.onrender.com/user/verify-email/${verificationToken}`;
 
         const mailOptions = {
             from: process.env.EMAIL,
             to: email,
-            subject: "Verify Your Email Address",
-            html: `
-                <p>Hi ${name},</p>
-                <p>Thank you for signing up. Please verify your email by clicking the link below:</p>
-                <a href="${verificationLink}">Verify Email</a>
-                <p>This link will expire in 1 hour.</p>
-            `,
+            subject: "Your OTP for Signup",
+            html: `<p>Hi ${name},</p><p>Your OTP for signup is: <b>${otp}</b></p><p>This OTP will expire in 5 minutes.</p>`,
         };
 
         await transporter.sendMail(mailOptions);
 
         return res.json({
             status: "SUCCESS",
-            message: "Signup successful! Verification email sent.",
+            message: "OTP sent to your email. Please verify to complete signup.",
         });
     } catch (error) {
         console.error(error);
@@ -156,43 +140,78 @@ router.post('/signup', async (req, res) => {
     }
 });
 
-//verify gmail by token
-router.get('/verify-email/:token', async (req, res) => {
-    const { token } = req.params;
+router.post('/verify-otp', async (req, res) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        return res.json({ status: "FAILED", errorCode: 2001, message: "Missing email or OTP!" });
+    }
+
+    const storedData = otpStore.get(email);
+    if (!storedData) {
+        return res.json({ status: "FAILED", errorCode: 2002, message: "OTP expired or not found!" });
+    }
+
+    if (storedData.otp !== parseInt(otp)) {
+        return res.json({ status: "FAILED", errorCode: 2003, message: "Invalid OTP!" });
+    }
+
+    if (Date.now() - storedData.createdAt > 300000) { // 5-minute expiry
+        otpStore.delete(email);
+        return res.json({ status: "FAILED", errorCode: 2004, message: "OTP expired!" });
+    }
 
     try {
-        // Verify the token
-        const decoded = jwt.verify(token, JWT_SECRET);
+        // Hash the password and create the user
+        const hashedPassword = await bcrypt.hash(storedData.password, 10);
+        const newUser = new User({ name: storedData.name, email, password: hashedPassword, isVerified: true });
+        await newUser.save();
 
-        // Find the user by ID
-        const user = await User.findById(decoded.id);
-        if (!user) {
-            return res.json({
-                status: "FAILED",
-                errorCode: 2001,
-                message: "Invalid or expired token!",
-            });
-        }
+        // Clear OTP
+        otpStore.delete(email);
 
-        // Mark the user as verified
-        user.isVerified = true;
-        await user.save();
+        // Generate Tokens
+        const accessToken = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET, { expiresIn: "15m" });
+        const refreshToken = jwt.sign({ id: newUser._id }, process.env.REFRESH_SECRET, { expiresIn: "7d" });
 
         return res.json({
             status: "SUCCESS",
-            message: "Email verified successfully!",
+            message: "Signup successful!",
+            accessToken,
+            refreshToken,
         });
     } catch (error) {
         console.error(error);
         return res.json({
             status: "FAILED",
-            errorCode: 2002,
-            message: "Invalid or expired token!",
+            errorCode: 2005,
+            message: "An error occurred during OTP verification.",
         });
     }
 });
 
-//signin
+router.post('/refresh-token', (req, res) => {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+        return res.status(401).json({ status: "FAILED", message: "Refresh token not provided!" });
+    }
+
+    try {
+        const decoded = jwt.verify(refreshToken, process.env.REFRESH_SECRET);
+        const accessToken = jwt.sign({ id: decoded.id }, process.env.JWT_SECRET, { expiresIn: "15m" });
+
+        return res.json({
+            status: "SUCCESS",
+            accessToken,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(403).json({ status: "FAILED", message: "Invalid or expired refresh token!" });
+    }
+});
+
+
 router.post('/signin', async (req, res) => {
     const { email, password } = req.body;
 
@@ -210,7 +229,7 @@ router.post('/signin', async (req, res) => {
             return res.json({
                 status: "FAILED",
                 errorCode: 3003,
-                message: "Email not verified. Please check your email for the verification link.",
+                message: "Email not verified. Please verify your email.",
             });
         }
 
@@ -219,24 +238,15 @@ router.post('/signin', async (req, res) => {
             return res.json({ status: "FAILED", errorCode: 3004, message: "Invalid password!" });
         }
 
-        // Fetch groups where the user is a member
-        const groups = await Group.find({ 'members.email': email }, '_id'); // Fetch only group IDs
-        const groupIds = groups.map(group => group._id);
-
-
-         // Generate JWT Token
-         const token = jwt.sign(
-            { id: user._id, email: user.email }, // Payload
-            JWT_SECRET, // Secret key
-            { expiresIn: "1y" } // Options
-        );
+        // Generate Tokens
+        const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "15m" });
+        const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_SECRET, { expiresIn: "7d" });
 
         return res.json({
             status: "SUCCESS",
             message: "Sign-in successful!",
-            token, // Include the JWT token in the response
-            data: { id: user._id, name: user.name, email: user.email, groups: groupIds, }, // Optional user data
-            
+            accessToken,
+            refreshToken,
         });
     } catch (error) {
         console.error(error);
