@@ -9,6 +9,7 @@ require('dotenv').config();
 
 const JWT_SECRET = "your_jwt_secret"; // Replace with a strong secret key
 const JWT_EXPIRES_IN = "15m";
+const OTP_EXPIRY_TIME = 15 * 60 * 1000; // 15 minutes
 const User = require('./../models/User');
 
 // password handler
@@ -258,145 +259,136 @@ router.post('/signin', async (req, res) => {
     }
 });
 
-// Forgot Password: Send Reset Token
-router.post('/forgot-password', (req, res) => {
+// Forgot Password: Send OTP
+router.post("/forgot-password", async (req, res) => {
     const { email } = req.body;
 
     if (!email || email.trim() === "") {
         return res.json({
             status: "FAILED",
             errorCode: 4001,
-            message: "Email is required!"
+            message: "Email is required!",
         });
     }
 
-    User.findOne({ email }).then(user => {
+    try {
+        const user = await User.findOne({ email });
         if (!user) {
             return res.json({
                 status: "FAILED",
                 errorCode: 4002,
-                message: "No user found with this email!"
+                message: "No user found with this email!",
             });
         }
 
-                // Generate a JWT token
-                const resetToken = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+        // Generate OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
+        const otpExpiry = Date.now() + OTP_EXPIRY_TIME;
 
-                // Send reset email
-                const transporter = nodemailer.createTransport({
-                    service: "gmail",
-                    auth: {
-                        user: process.env.EMAIL, //my email
-                        pass: process.env.EMAIL_PASSWORD // my email password in an environment variable
-                    }
-                });
-        
-                const mailOptions = {
-                    from: process.env.EMAIL,
-                    to: email,
-                    subject: "Password Reset",
-                    html: `
-                        <p>You requested a password reset</p>
-                        <p>Click the link below to reset your password:</p>
-                        <a href="${process.env.FRONTEND_URL}/reset-password/${resetToken}">Reset Password</a>
-                        <p>This link will expire in 15 minutes.</p>
-                    `
-                };
+        // Update user with OTP and expiry time
+        user.otp = otp;
+        user.otpExpiry = otpExpiry;
+        await user.save();
 
-                transporter.sendMail(mailOptions, (err, info) => {
-                    if (err) {
-                        return res.json({
-                            status: "FAILED",
-                            errorCode: 4003,
-                            message: "Failed to send email!",
-                            error: err
-                        });
-                    }
-        
-                    res.json({
-                        status: "SUCCESS",
-                        message: "Password reset email sent!"
-                    });
-                });
-            }).catch(err => {
-                res.json({
-                    status: "FAILED",
-                    errorCode: 4004,
-                    message: "An error occurred while finding user!",
-                    error: err
-                });
-            });
+        // Send OTP via email
+        const transporter = nodemailer.createTransport({
+            service: "gmail",
+            auth: {
+                user: process.env.EMAIL, // Your email
+                pass: process.env.EMAIL_PASSWORD, // Your email password
+            },
         });
 
-// Reset Password: Update the Password
-router.post('/reset-password/:token', (req, res) => {
-    const { token } = req.params;
-    const { newPassword } = req.body;
+        const mailOptions = {
+            from: process.env.EMAIL,
+            to: email,
+            subject: "Password Reset OTP",
+            html: `
+                <p>You requested a password reset.</p>
+                <p>Your OTP is: <strong>${otp}</strong></p>
+                <p>This OTP is valid for 15 minutes.</p>
+            `,
+        };
 
-    // Password validation: At least 8 characters, 1 number, and 1 symbol
-    const passwordRegex = /^(?=.*[0-9])(?=.*[!@#$%^&*])[a-zA-Z0-9!@#$%^&*]{8,}$/;
-    if (!newPassword || !passwordRegex.test(newPassword)) {
+        await transporter.sendMail(mailOptions);
+
+        res.json({
+            status: "SUCCESS",
+            message: "OTP sent to your email. Please use it to reset your password.",
+        });
+    } catch (error) {
+        console.error(error);
+        res.json({
+            status: "FAILED",
+            errorCode: 4003,
+            message: "An error occurred while sending the OTP!",
+        });
+    }
+});
+
+
+// Reset Password: Verify OTP and Update Password
+router.post("/reset-password", async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
         return res.json({
             status: "FAILED",
             errorCode: 5001,
-            message: "Password must be at least 8 characters long and include at least one number and one symbol!"
-        });
-    }
-        
-// Verify the JWT token
-jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) {
-        return res.json({
-            status: "FAILED",
-            errorCode: 5002,
-            message: "Invalid or expired reset token!"
+            message: "All fields (email, OTP, and new password) are required!",
         });
     }
 
-    // Token is valid, find the user and update the password
-    User.findById(decoded.id).then(user => {
+    // Password validation
+    const passwordRegex = /^(?=.*[0-9])(?=.*[!@#$%^&*])[a-zA-Z0-9!@#$%^&*]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+        return res.json({
+            status: "FAILED",
+            errorCode: 5002,
+            message: "Password must be at least 8 characters long and include at least one number and one symbol!",
+        });
+    }
+
+    try {
+        const user = await User.findOne({ email });
         if (!user) {
             return res.json({
                 status: "FAILED",
                 errorCode: 5003,
-                message: "User not found!"
+                message: "No user found with this email!",
+            });
+        }
+
+        // Check OTP validity
+        if (user.otp !== otp || user.otpExpiry < Date.now()) {
+            return res.json({
+                status: "FAILED",
+                errorCode: 5004,
+                message: "Invalid or expired OTP!",
             });
         }
 
         // Hash the new password
-        bcrypt.hash(newPassword, 10).then(hashedPassword => {
-            user.password = hashedPassword;
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-            user.save().then(() => {
-                res.json({
-                    status: "SUCCESS",
-                    message: "Password reset successful!"
-                });
-            }).catch(err => {
-                res.json({
-                    status: "FAILED",
-                    errorCode: 5004,
-                    message: "An error occurred while updating the password!",
-                    error: err
-                });
-            });
-        }).catch(err => {
-            res.json({
-                status: "FAILED",
-                errorCode: 5005,
-                message: "An error occurred while hashing the password!",
-                error: err
-            });
+        // Update password and clear OTP fields
+        user.password = hashedPassword;
+        user.otp = null;
+        user.otpExpiry = null;
+        await user.save();
+
+        res.json({
+            status: "SUCCESS",
+            message: "Password reset successful!",
         });
-    }).catch(err => {
+    } catch (error) {
+        console.error(error);
         res.json({
             status: "FAILED",
-            errorCode: 5006,
-            message: "An error occurred while finding the user!",
-            error: err
+            errorCode: 5005,
+            message: "An error occurred while resetting the password!",
         });
-    });
-});
+    }
 });
 
 // Logout route
