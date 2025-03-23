@@ -3,7 +3,7 @@ const Schema = mongoose.Schema;
 
 // Define the Transaction Schema
 const TransactionSchema = new Schema({
-    type: { type: String, enum: ["Expense", "Income"], // Allow only "Expense" or "Income"
+    type: { type: String, enum: ["Expense", "Income"], // Allow only "Expense" or "Income" 
         required: true },
     amount: { type: Number, required: true },
     description: { type: String, required: true },
@@ -11,19 +11,27 @@ const TransactionSchema = new Schema({
 }, { timestamps: true }); // Automatically adds createdAt and updatedAt fields
 
 // Define the User Schema
-const UserSchema = new Schema({name: { type: String, required: true },
-    email: { type: String, unique: true, sparse: true // Email can be optional for OAuth users
+const UserSchema = new Schema({
+    name: { type: String, required: true },email: { type: String, unique: true, sparse: true // Email can be optional for OAuth users
 },
     password: { type: String, required: function() { return !this.oauthProvider; 
         } // Password is required unless OAuth provider is used
     },
     isVerified: { type: Boolean, default: false }, // Field for email verification
     oauthProvider: { type: String, enum: ['google', 'facebook', 'twitter'], default: null }, // Tracks which OAuth provider the user used
-    oauthId: { type: String, unique: true, sparse: true }, // OAuth provider's unique ID for the user
+    oauthId: { type: String,  unique: true, sparse: true }, // OAuth provider's unique ID for the user
     accountBalance: {type: Number,default: 0, // Store the user's current account balance
 },
-    // Transactions array
+    // Transactions array 
     transactions: [TransactionSchema],
+    otp: { 
+        type: String, 
+        required: false // OTP is not always required
+    },
+    otpExpiry: { 
+        type: Date, 
+        required: false // Store the expiry time of the OTP
+    }
 }, { timestamps: true }); // Automatically adds createdAt and updatedAt fields
 
 const User = mongoose.model('User', UserSchema);

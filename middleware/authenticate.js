@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const JWT_SECRET = "your_jwt_secret"; 
 require('dotenv').config();
+
+const JWT_SECRET = process.env.JWT_SECRET; 
 
 module.exports = async (req, res, next) => {
     try {
@@ -25,7 +26,6 @@ module.exports = async (req, res, next) => {
 
         // Find the user associated with the token
         const user = await User.findById(decoded.id);
-
         if (!user) {
             return res.status(401).json({
                 status: "FAILED",

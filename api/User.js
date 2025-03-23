@@ -2,9 +2,9 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken'); // For creating and verifying JWTs
 const passport = require('passport'); // Add Passport
+const Group = require('../models/group');
 const nodemailer = require('nodemailer');
 const otpStore = new Map(); // Store OTPs temporarily
-const Group = require('../models/group');
 require('dotenv').config();
 
 const JWT_SECRET = "your_jwt_secret"; // Replace with a strong secret key
@@ -259,6 +259,7 @@ router.post('/signin', async (req, res) => {
     }
 });
 
+
 // Forgot Password: Send OTP
 router.post("/forgot-password", async (req, res) => {
     const { email } = req.body;
@@ -325,7 +326,6 @@ router.post("/forgot-password", async (req, res) => {
         });
     }
 });
-
 
 // Reset Password: Verify OTP and Update Password
 router.post("/reset-password", async (req, res) => {
@@ -406,5 +406,7 @@ router.get('/logout', (req, res) => {
         });
     });
 });
+
+
 
 module.exports = router;
