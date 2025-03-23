@@ -391,6 +391,94 @@ router.post("/reset-password", async (req, res) => {
     }
 });
 
+// Resend OTP for Signup
+router.post('/resend-otp-signup', async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.json({ status: "FAILED", errorCode: 6001, message: "Email is required!" });
+    }
+
+    const storedData = otpStore.get(email);
+    if (!storedData) {
+        return res.json({ status: "FAILED", errorCode: 6002, message: "No OTP request found for this email!" });
+    }
+
+    // Generate a new OTP
+    const newOtp = Math.floor(100000 + Math.random() * 900000); // 6-digit OTP
+    otpStore.set(email, { ...storedData, otp: newOtp, createdAt: Date.now() });
+
+    // Send OTP via email
+    const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+            user: process.env.EMAIL,
+            pass: process.env.EMAIL_PASSWORD,
+        },
+    });
+
+    const mailOptions = {
+        from: process.env.EMAIL,
+        to: email,
+        subject: "Resend OTP for Signup",
+        html: `<p>Your new OTP for signup is: <b>${newOtp}</b></p><p>This OTP will expire in 5 minutes.</p>`,
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        res.json({ status: "SUCCESS", message: "New OTP sent to your email." });
+    } catch (error) {
+        console.error(error);
+        res.json({ status: "FAILED", errorCode: 6003, message: "Error sending OTP!" });
+    }
+});
+
+// Resend OTP for Forgot Password
+router.post('/resend-otp-forgot-password', async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.json({ status: "FAILED", errorCode: 7001, message: "Email is required!" });
+    }
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.json({ status: "FAILED", errorCode: 7002, message: "No user found with this email!" });
+        }
+
+        // Generate a new OTP
+        const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiry = Date.now() + OTP_EXPIRY_TIME;
+
+        user.otp = newOtp;
+        user.otpExpiry = otpExpiry;
+        await user.save();
+
+        // Send OTP via email
+        const transporter = nodemailer.createTransport({
+            service: "gmail",
+            auth: {
+                user: process.env.EMAIL,
+                pass: process.env.EMAIL_PASSWORD,
+            },
+        });
+
+        const mailOptions = {
+            from: process.env.EMAIL,
+            to: email,
+            subject: "Resend OTP for Password Reset",
+            html: `<p>Your new OTP for password reset is: <b>${newOtp}</b></p><p>This OTP will expire in 15 minutes.</p>`,
+        };
+
+        await transporter.sendMail(mailOptions);
+        res.json({ status: "SUCCESS", message: "New OTP sent to your email." });
+    } catch (error) {
+        console.error(error);
+        res.json({ status: "FAILED", errorCode: 7003, message: "Error sending OTP!" });
+    }
+});
+
 // Logout route
 router.get('/logout', (req, res) => {
     req.logout((err) => {
