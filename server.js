@@ -11,6 +11,7 @@ const HomeRouter = require('./api/homepage'); // Import the Home API Router
 const PredictRouter = require('./api/predict'); // Import the Predict API Router
 const SettingsRouter = require('./api/settings');
 const groupsRouter = require('./api/groups');
+const friendRoutes = require('./api/addfriend');
 const cookieParser = require('cookie-parser'); 
 
 // Database connection
@@ -57,6 +58,7 @@ app.use('/homepage', HomeRouter); // Home page-related routes
 app.use('/settings', SettingsRouter); 
 app.use('/predict', PredictRouter); // Prediction-related routes
 app.use('/groups', groupsRouter);
+app.use('/api/friends', friendRoutes);
 
 
 // Default route for health check or debugging
